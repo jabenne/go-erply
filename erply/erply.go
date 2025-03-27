@@ -1,4 +1,4 @@
-package legacy
+package erply
 
 import (
 	"context"
@@ -19,8 +19,7 @@ type Client struct {
     rateLimiter ratelimit.Limiter
     gate *semaphore.Weighted
 
-	Customer *CustomerService
-	Coupon *CouponService
+	CRM *CRMService
 }
 
 type ClientConfig struct {
@@ -66,11 +65,9 @@ func NewClient(config *ClientConfig) (*Client, error) {
         nil,
         nil,
 		nil,
-		nil,
     }
 
-	c.Customer = &CustomerService{ client: &c }
-	c.Coupon = &CouponService{ client: &c }
+	c.CRM = &CRMService{ client: &c }	
 
     var vUser ErplyResponse[VerifyUserRecord]
     res, err := c.R().
@@ -90,13 +87,15 @@ func NewClient(config *ClientConfig) (*Client, error) {
     if res.IsSuccessState() {
         sK := vUser.Records[0].SessionKey
         c.
-            SetCommonQueryParam("sessionKey", sK).
-            SetCommonQueryParam("clientCode", config.ClientCode).
+            SetCommonHeader("sessionKey", sK).
+            SetCommonHeader("clientCode", config.ClientCode).
             SetCommonHeaderNonCanonical("accept", "application/json").
-			SetBaseURL(fmt.Sprintf("https://%s/api", config.Endpoint))
+			SetBaseURL(fmt.Sprintf("https://api-crm-%s/v1", config.Endpoint))
         return withMaxConcurrent(withThrottler(&c)), nil
     }
-    return nil, err
+
+
+    return &c, err
 }
 
 
@@ -142,11 +141,6 @@ type VerifyUserRecord struct {
 
 type Params map[string]string
 
-type DataResponse[T any] struct {
-	Status Status `json:"status"`
-	Data T `json:"data"`
-}
-
 type Status struct {
     RequestUnixTime int    `json:"requestUnixTime"`
     ResponseStatus  string `json:"responseStatus"`
@@ -157,9 +151,4 @@ type Status struct {
 type ErplyResponse[T any] struct {
 	Status Status`json:"status"`
 	Records []T `json:"records"`
-}
-
-type ErplyBulkResponse[T any] struct {
-	Status Status`json:"status"`
-	Requests []ErplyResponse[T] `json:"requests"`
 }
